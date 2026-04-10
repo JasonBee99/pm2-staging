@@ -69,6 +69,19 @@ export default function Alerts() {
     fetchAlerts();
   };
 
+  const handleTest = async (id) => {
+    try {
+      const result = await api.post(`/api/alerts/${id}/test`);
+      if (result.error) {
+        alert(`Test failed: ${result.error}`);
+      } else {
+        alert('Test notification sent! Check your notification channel.');
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const conditionLabels = {
     crash: 'Process Crash',
     restart_loop: 'Restart Loop',
@@ -136,7 +149,10 @@ export default function Alerts() {
                       </button>
                     </td>
                     <td>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(alert.id)}>Delete</button>
+                      <div className="btn-group">
+                        <button className="btn btn-sm" onClick={() => handleTest(alert.id)}>Test</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(alert.id)}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

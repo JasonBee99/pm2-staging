@@ -11,6 +11,7 @@ import config from './config.js';
 import { testConnection } from './db.js';
 import MysqlSessionStore from './services/mysql-session-store.js';
 import { startCleanupJobs } from './services/cleanup-jobs.js';
+import { startAlertEngine } from './services/alert-engine.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -95,6 +96,9 @@ async function start() {
 
   // Start cleanup jobs
   startCleanupJobs();
+
+  // Start alert engine
+  startAlertEngine();
 
   // Start server
   try {

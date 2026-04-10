@@ -53,4 +53,38 @@ export default async function alertRoutes(fastify) {
     await pool.execute('DELETE FROM alerts WHERE id = ?', [request.params.id]);
     return { ok: true };
   });
+
+  // Test alert - sends a sample notification to verify the webhook/channel works
+  fastify.post('/api/alerts/:id/test', async (request) => {
+    const [rows] = await pool.execute('SELECT * FROM alerts WHERE id = ?', [request.params.id]);
+    if (rows.length === 0) return { error: 'Alert not found' };
+
+    const alert = rows[0];
+    try {
+      if (alert.channel === 'discord' || alert.channel === 'webhook') {
+        const res = await fetch(alert.target, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: 'PM2 Monitor',
+            embeds: [{
+              title: '🧪 Test Alert',
+              description: 'This is a test notification from PM2 Monitor. If you can see this, your webhook is working!',
+              color: 0x3b82f6,
+              timestamp: new Date().toISOString(),
+              footer: { text: 'PM2 Monitor' },
+            }],
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { error: `Webhook returned ${res.status}: ${text}` };
+        }
+        return { ok: true, message: 'Test notification sent' };
+      }
+      return { error: `Test not supported for channel: ${alert.channel}` };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
 }

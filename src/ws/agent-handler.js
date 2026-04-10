@@ -1,6 +1,7 @@
 import pool from '../db.js';
 import { commandQueue } from '../services/command-queue.js';
 import { broadcastToDashboard } from './dashboard-handler.js';
+import { handleCrashEvent, handleRestartLoop } from '../services/alert-engine.js';
 
 // Connected agents: server_id -> WebSocket
 const agentConnections = new Map();
@@ -160,6 +161,20 @@ export default async function agentWsHandler(fastify) {
               const [rows] = await pool.execute('SELECT * FROM processes WHERE id = ?', [e.process_id]);
               if (rows.length > 0) {
                 broadcastToDashboard({ type: 'process_update', process: rows[0] });
+
+                // Fire alerts for crash events
+                if (e.kind === 'crash') {
+                  handleCrashEvent(e.process_id, serverId, e.message).catch(err =>
+                    console.error('[ws] Alert error:', err.message)
+                  );
+                }
+
+                // Detect restart loop (5+ restarts in a row)
+                if (e.kind === 'restart' && rows[0].restart_count >= 5) {
+                  handleRestartLoop(e.process_id, serverId, rows[0].restart_count).catch(err =>
+                    console.error('[ws] Alert error:', err.message)
+                  );
+                }
               }
             }
             break;
