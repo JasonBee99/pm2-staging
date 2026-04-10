@@ -6,7 +6,11 @@ async function request(method, path, body) {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   };
-  if (body) opts.body = JSON.stringify(body);
+  if (body !== undefined) {
+    opts.body = JSON.stringify(body);
+  } else if (method !== 'GET') {
+    opts.body = '{}';
+  }
 
   const res = await fetch(`${BASE}${path}`, opts);
   const data = await res.json();
