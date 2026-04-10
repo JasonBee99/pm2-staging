@@ -4,7 +4,7 @@ import os from 'os';
 import { getProcessMetrics } from './metrics-collector.js';
 
 /**
- * Find a PID by matching a pattern against /proc/*/cmdline
+ * Find a PID by matching a pattern against proc cmdlines
  */
 export function findPidByPattern(pattern) {
   try {
