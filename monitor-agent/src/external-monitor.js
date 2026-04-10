@@ -4,7 +4,7 @@ import os from 'os';
 import { getProcessMetrics } from './metrics-collector.js';
 
 /**
- * Find a PID by matching a pattern against proc cmdlines
+ * Find a PID by matching a pattern against proc cmdlines and working directories
  */
 export function findPidByPattern(pattern) {
   try {
@@ -12,17 +12,27 @@ export function findPidByPattern(pattern) {
 
     for (const pid of procDirs) {
       try {
+        // Don't match our own agent process
+        if (parseInt(pid) === process.pid) continue;
+
+        // Check cmdline
         const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8')
           .replace(/\0/g, ' ')
           .trim();
 
         if (cmdline && cmdline.includes(pattern)) {
-          // Don't match our own agent process
-          if (parseInt(pid) === process.pid) continue;
           return parseInt(pid);
         }
+
+        // Also check working directory (cwd symlink)
+        try {
+          const cwd = fs.readlinkSync(`/proc/${pid}/cwd`);
+          if (cwd && cwd.includes(pattern)) {
+            return parseInt(pid);
+          }
+        } catch {}
       } catch {
-        // Process may have exited between readdir and readFile
+        // Process may have exited
       }
     }
   } catch (err) {
