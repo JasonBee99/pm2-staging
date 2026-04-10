@@ -139,7 +139,7 @@ setInterval(() => {
 
   // Send external events
   for (const evt of ext.events) {
-    sendEvent(evt.process_id, evt.kind, evt.exit_code, evt.message);
+    sendEvent(evt.process_id, evt.kind, evt.exit_code, evt.message, evt.pid);
   }
 
   if (batch.length > 0) {

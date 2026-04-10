@@ -173,6 +173,14 @@ export class ExternalMonitor {
           // Found a (new) PID
           if (!entry.pid) {
             console.log(`[external] Found ${entry.config.name} at PID ${newPid}`);
+            events.push({
+              process_id: id,
+              kind: 'start',
+              exit_code: null,
+              message: `External process found at PID ${newPid}`,
+              pid: newPid,
+              time: new Date().toISOString(),
+            });
           }
           entry.pid = newPid;
         } else if (!newPid && entry.pid) {
