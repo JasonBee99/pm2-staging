@@ -4,9 +4,12 @@ import os from 'os';
 import { getProcessMetrics } from './metrics-collector.js';
 
 /**
- * Find a PID by matching a pattern against proc cmdlines and working directories
+ * Find a PID by matching a pattern against proc cmdlines and working directories.
+ * Only matches processes owned by the current user.
  */
 export function findPidByPattern(pattern) {
+  const myUid = process.getuid();
+
   try {
     const procDirs = fs.readdirSync('/proc').filter(d => /^\d+$/.test(d));
 
@@ -14,6 +17,10 @@ export function findPidByPattern(pattern) {
       try {
         // Don't match our own agent process
         if (parseInt(pid) === process.pid) continue;
+
+        // Only match processes owned by same user
+        const stat = fs.statSync(`/proc/${pid}`);
+        if (stat.uid !== myUid) continue;
 
         // Check cmdline
         const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8')
