@@ -18,15 +18,15 @@ export default async function processRoutes(fastify) {
 
   // Create new process
   fastify.post('/api/servers/:id/processes', { preHandler: [requireAdmin] }, async (request) => {
-    const { name, command, cwd, env_vars, autorestart, max_restarts } = request.body || {};
+    const { name, command, cwd, env_vars, autorestart, max_restarts, managed_by, match_pattern } = request.body || {};
     if (!name || !command) {
       return { error: 'name and command are required' };
     }
 
     const id = uuidv4();
     await pool.execute(
-      `INSERT INTO processes (id, server_id, name, command, cwd, env_vars, autorestart, max_restarts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO processes (id, server_id, name, command, cwd, env_vars, autorestart, max_restarts, managed_by, match_pattern)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         request.params.id,
@@ -36,6 +36,8 @@ export default async function processRoutes(fastify) {
         env_vars ? JSON.stringify(env_vars) : null,
         autorestart !== false,
         max_restarts || 10,
+        managed_by || 'agent',
+        match_pattern || null,
       ]
     );
 
@@ -48,7 +50,7 @@ export default async function processRoutes(fastify) {
 
   // Edit process config
   fastify.patch('/api/processes/:id', { preHandler: [requireAdmin] }, async (request) => {
-    const { name, command, cwd, env_vars, autorestart, max_restarts } = request.body || {};
+    const { name, command, cwd, env_vars, autorestart, max_restarts, managed_by, match_pattern } = request.body || {};
     const fields = [];
     const values = [];
 
@@ -58,6 +60,8 @@ export default async function processRoutes(fastify) {
     if (env_vars !== undefined) { fields.push('env_vars = ?'); values.push(JSON.stringify(env_vars)); }
     if (autorestart !== undefined) { fields.push('autorestart = ?'); values.push(autorestart); }
     if (max_restarts !== undefined) { fields.push('max_restarts = ?'); values.push(max_restarts); }
+    if (managed_by !== undefined) { fields.push('managed_by = ?'); values.push(managed_by); }
+    if (match_pattern !== undefined) { fields.push('match_pattern = ?'); values.push(match_pattern); }
 
     if (fields.length === 0) return { error: 'No fields to update' };
 

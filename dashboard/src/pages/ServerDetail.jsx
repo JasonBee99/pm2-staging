@@ -13,7 +13,7 @@ export default function ServerDetail() {
   const [liveMetrics, setLiveMetrics] = useState({});
 
   // Form state
-  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10 });
+  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
 
   const fetchData = useCallback(async () => {
     try {
@@ -64,7 +64,7 @@ export default function ServerDetail() {
     try {
       await api.post(`/api/servers/${id}/processes`, form);
       setShowAddProcess(false);
-      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10 });
+      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -127,6 +127,7 @@ export default function ServerDetail() {
                 <tr>
                   <th>Name</th>
                   <th>Status</th>
+                  <th>Mode</th>
                   <th>CPU</th>
                   <th>Memory</th>
                   <th>PID</th>
@@ -149,6 +150,11 @@ export default function ServerDetail() {
                         </div>
                       </td>
                       <td><span className={`badge badge-${proc.status}`}>{proc.status}</span></td>
+                      <td>
+                        <span className="mono" style={{ fontSize: 11, color: proc.managed_by === 'external' ? 'var(--cyan)' : 'var(--text-muted)' }}>
+                          {proc.managed_by === 'external' ? 'external' : 'managed'}
+                        </span>
+                      </td>
                       <td className="mono">{live?.cpu != null ? `${live.cpu.toFixed(1)}%` : '-'}</td>
                       <td className="mono">{live?.mem != null ? formatBytes(live.mem) : '-'}</td>
                       <td className="mono">{proc.pid || '-'}</td>
@@ -158,10 +164,10 @@ export default function ServerDetail() {
                       <td className="mono">{proc.status === 'running' ? formatUptime(proc.uptime_started_at) : '-'}</td>
                       <td>
                         <div className="btn-group">
-                          {proc.status !== 'running' && (
+                          {proc.managed_by !== 'external' && proc.status !== 'running' && (
                             <button className="btn btn-sm btn-success" onClick={() => handleAction(proc.id, 'start')}>Start</button>
                           )}
-                          {proc.status === 'running' && (
+                          {proc.managed_by !== 'external' && proc.status === 'running' && (
                             <>
                               <button className="btn btn-sm" onClick={() => handleAction(proc.id, 'restart')}>Restart</button>
                               <button className="btn btn-sm btn-danger" onClick={() => handleAction(proc.id, 'stop')}>Stop</button>
@@ -188,31 +194,63 @@ export default function ServerDetail() {
             <div className="modal-title">Add Process</div>
             <form onSubmit={handleAddProcess}>
               <div className="form-group">
-                <label className="form-label">Process Name</label>
-                <input className="form-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="my-api" required autoFocus />
+                <label className="form-label">Mode</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button"
+                    className={`btn btn-sm ${form.managed_by === 'external' ? 'btn-primary' : ''}`}
+                    onClick={() => setForm({ ...form, managed_by: 'external' })}>
+                    Monitor Only (external)
+                  </button>
+                  <button type="button"
+                    className={`btn btn-sm ${form.managed_by === 'agent' ? 'btn-primary' : ''}`}
+                    onClick={() => setForm({ ...form, managed_by: 'agent' })}>
+                    Fully Managed
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {form.managed_by === 'external'
+                    ? 'Watches an existing process (e.g. PM2-managed). Won\'t start/stop it.'
+                    : 'Agent spawns and manages the process lifecycle.'}
+                </div>
               </div>
               <div className="form-group">
-                <label className="form-label">Command</label>
-                <input className="form-input" value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })}
-                  placeholder="node server.js" required />
+                <label className="form-label">Process Name</label>
+                <input className="form-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="flarepublic-live" required autoFocus />
               </div>
+              <div className="form-group">
+                <label className="form-label">{form.managed_by === 'external' ? 'Command (for reference)' : 'Command'}</label>
+                <input className="form-input" value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })}
+                  placeholder={form.managed_by === 'external' ? 'next start' : 'node server.js'} required />
+              </div>
+              {form.managed_by === 'external' && (
+                <div className="form-group">
+                  <label className="form-label">Match Pattern</label>
+                  <input className="form-input" value={form.match_pattern} onChange={(e) => setForm({ ...form, match_pattern: e.target.value })}
+                    placeholder="next start" />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    String to match in /proc cmdline to find the PID. Leave blank to use the command.
+                  </div>
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label">Working Directory</label>
                 <input className="form-input" value={form.cwd} onChange={(e) => setForm({ ...form, cwd: e.target.value })}
                   placeholder="/home/user/my-app" />
               </div>
-              <div className="form-group" style={{ display: 'flex', gap: 16 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                  <input type="checkbox" checked={form.autorestart} onChange={(e) => setForm({ ...form, autorestart: e.target.checked })} />
-                  Auto-restart
-                </label>
-                <div>
-                  <label className="form-label" style={{ marginBottom: 4 }}>Max Restarts</label>
-                  <input type="number" className="form-input" style={{ width: 80 }} value={form.max_restarts}
-                    onChange={(e) => setForm({ ...form, max_restarts: parseInt(e.target.value) || 10 })} />
+              {form.managed_by === 'agent' && (
+                <div className="form-group" style={{ display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={form.autorestart} onChange={(e) => setForm({ ...form, autorestart: e.target.checked })} />
+                    Auto-restart
+                  </label>
+                  <div>
+                    <label className="form-label" style={{ marginBottom: 4 }}>Max Restarts</label>
+                    <input type="number" className="form-input" style={{ width: 80 }} value={form.max_restarts}
+                      onChange={(e) => setForm({ ...form, max_restarts: parseInt(e.target.value) || 10 })} />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="modal-actions">
                 <button type="button" className="btn" onClick={() => setShowAddProcess(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Create Process</button>

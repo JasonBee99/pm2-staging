@@ -20,7 +20,7 @@ export default async function agentRoutes(fastify) {
 
     // Return current process config
     const [processes] = await pool.execute(
-      'SELECT id, name, command, cwd, env_vars, autorestart, max_restarts FROM processes WHERE server_id = ?',
+      'SELECT id, name, command, cwd, env_vars, autorestart, max_restarts, managed_by, match_pattern FROM processes WHERE server_id = ?',
       [serverId]
     );
 
@@ -30,7 +30,7 @@ export default async function agentRoutes(fastify) {
   // Fetch config (desired process list)
   fastify.get('/api/agent/config', async (request) => {
     const [processes] = await pool.execute(
-      'SELECT id, name, command, cwd, env_vars, autorestart, max_restarts FROM processes WHERE server_id = ?',
+      'SELECT id, name, command, cwd, env_vars, autorestart, max_restarts, managed_by, match_pattern FROM processes WHERE server_id = ?',
       [request.server_id]
     );
     return { processes };

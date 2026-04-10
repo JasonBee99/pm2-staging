@@ -4,6 +4,7 @@ import {
   applyConfig, startProcess, stopProcess, restartProcess,
   getManagedProcesses, healthCheck, setEventCallback, setLogCallback,
 } from './supervisor.js';
+import { ExternalMonitor } from './external-monitor.js';
 import {
   connect, setCallbacks, sendMetrics, sendEvent, sendLog,
   sendHeartbeat, isConnected, disconnect,
@@ -12,6 +13,9 @@ import {
 // Load config
 const config = loadConfig();
 
+// External process monitor (for PM2-managed or other external processes)
+const externalMonitor = new ExternalMonitor();
+
 console.log(`
 ╔══════════════════════════════════════╗
 ║       Process Monitor Agent          ║
@@ -19,7 +23,7 @@ console.log(`
 ╚══════════════════════════════════════╝
 `);
 
-// Wire up supervisor callbacks
+// Wire up supervisor callbacks (only for agent-managed processes)
 setEventCallback((processId, kind, exitCode, message, pid) => {
   sendEvent(processId, kind, exitCode, message, pid);
 });
@@ -28,12 +32,22 @@ setLogCallback((processId, stream, line) => {
   sendLog(processId, stream, line);
 });
 
+// Apply config, splitting between agent-managed and external
+function applyFullConfig(processes) {
+  const agentManaged = processes.filter(p => p.managed_by !== 'external');
+  const external = processes.filter(p => p.managed_by === 'external');
+
+  console.log(`[agent] Config: ${agentManaged.length} managed, ${external.length} external`);
+  applyConfig(agentManaged);
+  externalMonitor.updateConfig(external);
+}
+
 // Wire up WS callbacks
 setCallbacks({
   onAuth: async (serverId) => {
     console.log(`[agent] Registered as server ${serverId}`);
 
-    // Fetch initial config via REST as backup
+    // Fetch initial config via REST
     try {
       const url = config.central_url.replace(/\/$/, '');
       const httpUrl = url.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
@@ -48,7 +62,7 @@ setCallbacks({
       const data = await res.json();
       if (data.processes) {
         console.log(`[agent] Received ${data.processes.length} process configs`);
-        applyConfig(data.processes);
+        applyFullConfig(data.processes);
       }
     } catch (err) {
       console.error('[agent] Failed to register via REST:', err.message);
@@ -64,7 +78,6 @@ setCallbacks({
       case 'restart':
         return restartProcess(msg.process_id);
       case 'config_update':
-        // Re-fetch config from central
         fetchConfig();
         return true;
       default:
@@ -85,7 +98,7 @@ async function fetchConfig() {
     const data = await res.json();
     if (data.processes) {
       console.log(`[agent] Config update: ${data.processes.length} processes`);
-      applyConfig(data.processes);
+      applyFullConfig(data.processes);
     }
   } catch (err) {
     console.error('[agent] Failed to fetch config:', err.message);
@@ -97,9 +110,10 @@ connect();
 
 // Metrics collection loop
 setInterval(() => {
-  const managed = getManagedProcesses();
   const batch = [];
 
+  // Agent-managed processes
+  const managed = getManagedProcesses();
   for (const [id, entry] of managed) {
     if (entry.pid && entry.status === 'running') {
       const metrics = getProcessMetrics(entry.pid);
@@ -112,6 +126,20 @@ setInterval(() => {
         });
       }
     }
+  }
+
+  // External processes (PM2, etc.)
+  const ext = externalMonitor.collect();
+  batch.push(...ext.metrics);
+
+  // Send external logs
+  for (const log of ext.logs) {
+    sendLog(log.process_id, log.stream, log.line);
+  }
+
+  // Send external events
+  for (const evt of ext.events) {
+    sendEvent(evt.process_id, evt.kind, evt.exit_code, evt.message);
   }
 
   if (batch.length > 0) {
@@ -129,7 +157,7 @@ setInterval(() => {
   healthCheck();
 }, 15000);
 
-// Graceful shutdown
+// Graceful shutdown — only stop agent-managed processes, leave external ones alone
 function shutdown(signal) {
   console.log(`\n[agent] Received ${signal}, shutting down...`);
 
@@ -140,7 +168,6 @@ function shutdown(signal) {
 
   disconnect();
 
-  // Give processes 5 seconds to die
   setTimeout(() => {
     console.log('[agent] Exiting.');
     process.exit(0);
