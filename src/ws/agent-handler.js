@@ -107,6 +107,12 @@ export default async function agentWsHandler(fastify) {
 
           case 'metrics':
             if (Array.isArray(msg.data) && msg.data.length > 0) {
+              // Also treat metrics arrival as a heartbeat
+              await pool.execute(
+                "UPDATE servers SET status = 'online', last_seen_at = NOW() WHERE id = ?",
+                [serverId]
+              );
+
               const values = [];
               const placeholders = [];
               for (const m of msg.data) {

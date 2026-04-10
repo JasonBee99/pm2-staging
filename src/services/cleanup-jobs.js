@@ -67,18 +67,18 @@ export function startCleanupJobs() {
   // Every 30 seconds: mark servers as stale/offline
   cron.schedule('*/30 * * * * *', async () => {
     try {
-      // Stale if no heartbeat in 30s
+      // Stale if no heartbeat in 60s (agent sends every 10s + metrics every 5s)
       await pool.execute(`
         UPDATE servers SET status = 'stale'
-        WHERE status = 'online' AND last_seen_at < NOW() - INTERVAL 30 SECOND
+        WHERE status = 'online' AND last_seen_at < NOW() - INTERVAL 60 SECOND
       `);
-      // Offline if no heartbeat in 2 minutes
+      // Offline if no heartbeat in 3 minutes
       await pool.execute(`
         UPDATE servers SET status = 'offline'
-        WHERE status = 'stale' AND last_seen_at < NOW() - INTERVAL 2 MINUTE
+        WHERE status IN ('stale', 'online') AND last_seen_at < NOW() - INTERVAL 3 MINUTE
       `);
     } catch (err) {
-      // Silently ignore — this runs very frequently
+      // Silently ignore
     }
   });
 

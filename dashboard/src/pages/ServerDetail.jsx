@@ -10,6 +10,7 @@ export default function ServerDetail() {
   const [processes, setProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddProcess, setShowAddProcess] = useState(false);
+  const [editingProcess, setEditingProcess] = useState(null);
   const [liveMetrics, setLiveMetrics] = useState({});
 
   // Form state
@@ -59,22 +60,43 @@ export default function ServerDetail() {
     }
   };
 
-  const handleAddProcess = async (e) => {
-    e.preventDefault();
+  const handleAddProcess = handleSubmitProcess;
+
+  const handleDeleteProcess = async (processId, name) => {
+    if (!confirm(`Delete process "${name}"? This cannot be undone.`)) return;
     try {
-      await api.post(`/api/servers/${id}/processes`, form);
-      setShowAddProcess(false);
-      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
+      await api.delete(`/api/processes/${processId}`);
       fetchData();
     } catch (err) {
       alert(err.message);
     }
   };
 
-  const handleDeleteProcess = async (processId, name) => {
-    if (!confirm(`Delete process "${name}"? This cannot be undone.`)) return;
+  const handleEditClick = (proc) => {
+    setEditingProcess(proc);
+    setForm({
+      name: proc.name || '',
+      command: proc.command || '',
+      cwd: proc.cwd || '',
+      autorestart: !!proc.autorestart,
+      max_restarts: proc.max_restarts || 10,
+      managed_by: proc.managed_by || 'agent',
+      match_pattern: proc.match_pattern || '',
+    });
+    setShowAddProcess(true);
+  };
+
+  const handleSubmitProcess = async (e) => {
+    e.preventDefault();
     try {
-      await api.delete(`/api/processes/${processId}`);
+      if (editingProcess) {
+        await api.patch(`/api/processes/${editingProcess.id}`, form);
+      } else {
+        await api.post(`/api/servers/${id}/processes`, form);
+      }
+      setShowAddProcess(false);
+      setEditingProcess(null);
+      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -176,7 +198,10 @@ export default function ServerDetail() {
                             </>
                           )}
                           {user?.role === 'admin' && (
-                            <button className="btn btn-sm btn-icon" onClick={() => handleDeleteProcess(proc.id, proc.name)} title="Delete">🗑</button>
+                            <>
+                              <button className="btn btn-sm" onClick={() => handleEditClick(proc)} title="Edit">Edit</button>
+                              <button className="btn btn-sm btn-icon" onClick={() => handleDeleteProcess(proc.id, proc.name)} title="Delete">🗑</button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -189,12 +214,12 @@ export default function ServerDetail() {
         )}
       </div>
 
-      {/* Add Process Modal */}
+      {/* Add/Edit Process Modal */}
       {showAddProcess && (
-        <div className="modal-overlay" onClick={() => setShowAddProcess(false)}>
+        <div className="modal-overlay" onClick={() => { setShowAddProcess(false); setEditingProcess(null); }}>
           <div className="modal fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Add Process</div>
-            <form onSubmit={handleAddProcess}>
+            <div className="modal-title">{editingProcess ? `Edit Process: ${editingProcess.name}` : 'Add Process'}</div>
+            <form onSubmit={handleSubmitProcess}>
               <div className="form-group">
                 <label className="form-label">Mode</label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -254,8 +279,8 @@ export default function ServerDetail() {
                 </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setShowAddProcess(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create Process</button>
+                <button type="button" className="btn" onClick={() => { setShowAddProcess(false); setEditingProcess(null); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary">{editingProcess ? 'Save Changes' : 'Create Process'}</button>
               </div>
             </form>
           </div>
