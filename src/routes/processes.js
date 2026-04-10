@@ -10,7 +10,10 @@ export default async function processRoutes(fastify) {
   // List processes for a server
   fastify.get('/api/servers/:id/processes', async (request) => {
     const [rows] = await pool.execute(
-      'SELECT * FROM processes WHERE server_id = ? ORDER BY name',
+      `SELECT p.*,
+        (SELECT cpu_pct FROM metrics m WHERE m.process_id = p.id ORDER BY recorded_at DESC LIMIT 1) as latest_cpu,
+        (SELECT mem_bytes FROM metrics m WHERE m.process_id = p.id ORDER BY recorded_at DESC LIMIT 1) as latest_mem
+       FROM processes p WHERE p.server_id = ? ORDER BY p.name`,
       [request.params.id]
     );
     return { processes: rows };

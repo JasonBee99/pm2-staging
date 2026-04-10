@@ -139,6 +139,8 @@ export default function ServerDetail() {
               <tbody>
                 {processes.map(proc => {
                   const live = liveMetrics[proc.id];
+                  const cpu = live?.cpu ?? proc.latest_cpu;
+                  const mem = live?.mem ?? proc.latest_mem;
                   return (
                     <tr key={proc.id}>
                       <td>
@@ -155,8 +157,8 @@ export default function ServerDetail() {
                           {proc.managed_by === 'external' ? 'external' : 'managed'}
                         </span>
                       </td>
-                      <td className="mono">{live?.cpu != null ? `${live.cpu.toFixed(1)}%` : '-'}</td>
-                      <td className="mono">{live?.mem != null ? formatBytes(live.mem) : '-'}</td>
+                      <td className="mono">{cpu != null ? `${Number(cpu).toFixed(1)}%` : '-'}</td>
+                      <td className="mono">{mem != null ? formatBytes(Number(mem)) : '-'}</td>
                       <td className="mono">{proc.pid || '-'}</td>
                       <td className="mono" style={{ color: proc.restart_count > 5 ? 'var(--yellow)' : 'inherit' }}>
                         {proc.restart_count}
