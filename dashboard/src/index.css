@@ -1,9 +1,9 @@
 :root {
   --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: #151d2e;
-  --bg-card-hover: #1a2438;
-  --bg-input: #0d1321;
+  --bg-secondary: rgba(17, 24, 39, 0.85);
+  --bg-card: rgba(21, 29, 46, 0.82);
+  --bg-card-hover: rgba(26, 36, 56, 0.9);
+  --bg-input: rgba(13, 19, 33, 0.9);
   --border: #1e293b;
   --border-focus: #3b82f6;
 
@@ -36,12 +36,22 @@
 
 html, body, #root {
   height: 100%;
-  background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--bg-primary);
+  background-image:
+    linear-gradient(rgba(10, 14, 23, 0.88), rgba(10, 14, 23, 0.92)),
+    url('/bg-circuit.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 /* Layout */
@@ -60,7 +70,8 @@ html, body, #root {
   position: sticky;
   top: 0;
   z-index: 100;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .navbar-brand {
   display: flex;
@@ -122,6 +133,8 @@ html, body, #root {
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .card-header {
   display: flex;
@@ -254,6 +267,8 @@ tr:hover td { background: var(--bg-card-hover); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
 .stat-value { font-size: 28px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
@@ -297,7 +312,6 @@ tr:hover td { background: var(--bg-card-hover); }
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--bg-primary);
 }
 .login-card {
   background: var(--bg-card);
@@ -307,6 +321,8 @@ tr:hover td { background: var(--bg-card-hover); }
   width: 100%;
   max-width: 400px;
   box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .login-title {
   font-family: var(--font-mono);
@@ -374,6 +390,8 @@ tr:hover td { background: var(--bg-card-hover); }
   text-decoration: none;
   color: inherit;
   display: block;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .server-card:hover {
   border-color: var(--accent);
