@@ -14,7 +14,7 @@ export default function ServerDetail() {
   const [liveMetrics, setLiveMetrics] = useState({});
 
   // Form state
-  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
+  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '' });
 
   const fetchData = useCallback(async () => {
     try {
@@ -74,6 +74,14 @@ export default function ServerDetail() {
 
   const handleEditClick = (proc) => {
     setEditingProcess(proc);
+    // Convert env_vars JSON back to KEY=value text
+    let envText = '';
+    if (proc.env_vars) {
+      try {
+        const parsed = typeof proc.env_vars === 'string' ? JSON.parse(proc.env_vars) : proc.env_vars;
+        envText = Object.entries(parsed).map(([k, v]) => `${k}=${v}`).join('\n');
+      } catch {}
+    }
     setForm({
       name: proc.name || '',
       command: proc.command || '',
@@ -82,6 +90,7 @@ export default function ServerDetail() {
       max_restarts: proc.max_restarts || 10,
       managed_by: proc.managed_by || 'agent',
       match_pattern: proc.match_pattern || '',
+      env_vars_text: envText,
     });
     setShowAddProcess(true);
   };
@@ -89,14 +98,38 @@ export default function ServerDetail() {
   const handleSubmitProcess = async (e) => {
     e.preventDefault();
     try {
+      // Parse KEY=value lines into an object
+      const envVars = {};
+      if (form.env_vars_text) {
+        form.env_vars_text.split('\n').forEach(line => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) return;
+          const eq = trimmed.indexOf('=');
+          if (eq > 0) {
+            envVars[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+          }
+        });
+      }
+
+      const payload = {
+        name: form.name,
+        command: form.command,
+        cwd: form.cwd,
+        autorestart: form.autorestart,
+        max_restarts: form.max_restarts,
+        managed_by: form.managed_by,
+        match_pattern: form.match_pattern,
+        env_vars: Object.keys(envVars).length > 0 ? envVars : null,
+      };
+
       if (editingProcess) {
-        await api.patch(`/api/processes/${editingProcess.id}`, form);
+        await api.patch(`/api/processes/${editingProcess.id}`, payload);
       } else {
-        await api.post(`/api/servers/${id}/processes`, form);
+        await api.post(`/api/servers/${id}/processes`, payload);
       }
       setShowAddProcess(false);
       setEditingProcess(null);
-      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '' });
+      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '' });
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -265,6 +298,18 @@ export default function ServerDetail() {
                 <input className="form-input" value={form.cwd} onChange={(e) => setForm({ ...form, cwd: e.target.value })}
                   placeholder="/home/user/my-app" />
               </div>
+              {form.managed_by === 'agent' && (
+                <div className="form-group">
+                  <label className="form-label">Environment Variables</label>
+                  <textarea className="form-input" rows={4} value={form.env_vars_text}
+                    onChange={(e) => setForm({ ...form, env_vars_text: e.target.value })}
+                    placeholder="PORT=8280&#10;NODE_ENV=production&#10;API_KEY=xxx"
+                    style={{ fontFamily: 'var(--font-mono)', resize: 'vertical' }} />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    One KEY=value per line. Lines starting with # are ignored.
+                  </div>
+                </div>
+              )}
               {form.managed_by === 'agent' && (
                 <div className="form-group" style={{ display: 'flex', gap: 16 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
