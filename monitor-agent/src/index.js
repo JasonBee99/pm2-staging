@@ -1,5 +1,6 @@
 import { loadConfig, getConfig } from './config.js';
 import { getProcessMetrics, getSystemInfo } from './metrics-collector.js';
+import { collectSystemMetrics } from './system-metrics.js';
 import {
   applyConfig, startProcess, stopProcess, restartProcess,
   getManagedProcesses, healthCheck, setEventCallback, setLogCallback,
@@ -147,9 +148,14 @@ setInterval(() => {
   }
 }, config.metrics_interval_ms);
 
-// Heartbeat loop
-setInterval(() => {
-  sendHeartbeat();
+// Heartbeat loop — also sends system-level metrics
+setInterval(async () => {
+  try {
+    const sysMetrics = await collectSystemMetrics();
+    sendHeartbeat(sysMetrics);
+  } catch (err) {
+    sendHeartbeat();
+  }
 }, config.heartbeat_interval_ms);
 
 // Health check loop (detect zombie processes)

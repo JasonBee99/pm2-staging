@@ -1,7 +1,47 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatUptime } from '../api.js';
+import { api, formatUptime, formatBytes } from '../api.js';
 import { useAuth } from '../App.jsx';
+
+function formatSeconds(s) {
+  if (!s) return '-';
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+const COLOR_MAP = {
+  cyan: '#06b6d4',
+  green: '#22c55e',
+  yellow: '#eab308',
+  red: '#ef4444',
+  purple: '#a855f7',
+};
+
+function MetricBar({ label, value, max, unit, color, display }) {
+  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  const c = COLOR_MAP[color] || COLOR_MAP.cyan;
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: 3, letterSpacing: '0.5px' }}>
+        <span style={{ fontWeight: 600 }}>{label}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{display || `${value.toFixed(1)}${unit}`}</span>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{
+          width: `${pct}%`,
+          height: '100%',
+          background: c,
+          boxShadow: `0 0 6px ${c}80`,
+          transition: 'width 0.4s ease',
+        }} />
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -120,20 +160,50 @@ export default function Dashboard() {
                 <span className={`badge badge-${server.status}`}>{server.status}</span>
               </div>
               {server.hostname && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 10 }}>
                   {server.hostname}
                 </div>
               )}
+
+              {/* System metrics bars */}
+              {server.cpu_pct != null && (
+                <div style={{ marginBottom: 12, marginTop: 4 }}>
+                  <MetricBar label="CPU" value={server.cpu_pct} max={100} unit="%" color={server.cpu_pct > 80 ? 'red' : server.cpu_pct > 50 ? 'yellow' : 'cyan'} />
+                  {server.mem_total_bytes > 0 && (
+                    <MetricBar
+                      label="RAM"
+                      value={(server.mem_used_bytes / server.mem_total_bytes) * 100}
+                      max={100}
+                      unit=""
+                      color="green"
+                      display={`${formatBytes(server.mem_used_bytes)} / ${formatBytes(server.mem_total_bytes)}`}
+                    />
+                  )}
+                  {server.disk_total_bytes > 0 && (
+                    <MetricBar
+                      label="DISK"
+                      value={(server.disk_used_bytes / server.disk_total_bytes) * 100}
+                      max={100}
+                      unit=""
+                      color="purple"
+                      display={`${formatBytes(server.disk_used_bytes)} / ${formatBytes(server.disk_total_bytes)}`}
+                    />
+                  )}
+                </div>
+              )}
+
               <div className="server-card-meta">
                 <span className="server-card-stat">
-                  Processes: <strong>{server.process_count || 0}</strong>
+                  <strong>{server.running_count || 0}</strong>/{server.process_count || 0} procs
                 </span>
-                <span className="server-card-stat">
-                  Running: <strong style={{ color: 'var(--green)' }}>{server.running_count || 0}</strong>
-                </span>
-                {server.last_seen_at && (
+                {server.load_1min != null && (
                   <span className="server-card-stat">
-                    Seen: <strong>{formatUptime(server.last_seen_at)} ago</strong>
+                    Load: <strong>{server.load_1min.toFixed(2)}</strong>
+                  </span>
+                )}
+                {server.uptime_seconds > 0 && (
+                  <span className="server-card-stat">
+                    Up: <strong>{formatSeconds(server.uptime_seconds)}</strong>
                   </span>
                 )}
               </div>

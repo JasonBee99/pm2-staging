@@ -183,13 +183,14 @@ export function sendLog(processId, stream, line) {
 }
 
 /**
- * Send heartbeat.
+ * Send heartbeat with optional system metrics.
  */
-export function sendHeartbeat() {
+export function sendHeartbeat(sysMetrics) {
   send({
     type: 'heartbeat',
     data: {
       uptime: process.uptime(),
+      system: sysMetrics || null,
     },
   });
 }

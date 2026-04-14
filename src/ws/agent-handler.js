@@ -100,10 +100,29 @@ export default async function agentWsHandler(fastify) {
       try {
         switch (msg.type) {
           case 'heartbeat':
-            await pool.execute(
-              "UPDATE servers SET status = 'online', last_seen_at = NOW() WHERE id = ?",
-              [serverId]
-            );
+            if (msg.data?.system) {
+              const s = msg.data.system;
+              await pool.execute(
+                `UPDATE servers SET status = 'online', last_seen_at = NOW(),
+                  cpu_pct = ?, mem_used_bytes = ?, mem_total_bytes = ?,
+                  disk_used_bytes = ?, disk_total_bytes = ?,
+                  load_1min = ?, load_5min = ?, load_15min = ?,
+                  uptime_seconds = ?, cpu_count = ?
+                 WHERE id = ?`,
+                [
+                  s.cpu_pct, s.mem_used_bytes, s.mem_total_bytes,
+                  s.disk_used_bytes, s.disk_total_bytes,
+                  s.load_1min, s.load_5min, s.load_15min,
+                  s.uptime_seconds, s.cpu_count,
+                  serverId,
+                ]
+              );
+            } else {
+              await pool.execute(
+                "UPDATE servers SET status = 'online', last_seen_at = NOW() WHERE id = ?",
+                [serverId]
+              );
+            }
             break;
 
           case 'metrics':
