@@ -225,6 +225,22 @@ export default async function agentWsHandler(fastify) {
               message: msg.message,
             });
             break;
+
+          case 'deploy_start':
+          case 'deploy_output':
+          case 'deploy_done':
+            broadcastToDashboard({
+              type: msg.type,
+              command_id: msg.command_id,
+              process_id: msg.process_id,
+              stream: msg.stream,
+              line: msg.line,
+              success: msg.success,
+              stage: msg.stage,
+              exit_code: msg.exit_code,
+              time: msg.time,
+            });
+            break;
         }
       } catch (err) {
         console.error(`[ws] Agent message error (${msg.type}):`, err.message);

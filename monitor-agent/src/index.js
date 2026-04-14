@@ -1,6 +1,7 @@
 import { loadConfig, getConfig } from './config.js';
 import { getProcessMetrics, getSystemInfo } from './metrics-collector.js';
 import { collectSystemMetrics } from './system-metrics.js';
+import { runDeploy } from './deploy-runner.js';
 import {
   applyConfig, startProcess, stopProcess, restartProcess,
   getManagedProcesses, healthCheck, setEventCallback, setLogCallback,
@@ -78,6 +79,9 @@ setCallbacks({
         return stopProcess(msg.process_id);
       case 'restart':
         return restartProcess(msg.process_id);
+      case 'deploy':
+        handleDeploy(msg);
+        return true;
       case 'config_update':
         fetchConfig();
         return true;
@@ -87,6 +91,76 @@ setCallbacks({
     }
   },
 });
+
+// Handle deploy command from central
+async function handleDeploy(msg) {
+  const { process_id, command_id, cwd, build_command, env_vars } = msg;
+
+  // Send start event
+  const { send } = await import('./ws-client.js');
+  send({
+    type: 'deploy_start',
+    command_id,
+    process_id,
+    time: new Date().toISOString(),
+  });
+
+  // Parse env vars
+  let env = {};
+  if (env_vars) {
+    try {
+      env = typeof env_vars === 'string' ? JSON.parse(env_vars) : env_vars;
+    } catch {}
+  }
+
+  await runDeploy({
+    cwd,
+    buildCommand: build_command,
+    env,
+    onOutput: (stream, line) => {
+      send({
+        type: 'deploy_output',
+        command_id,
+        process_id,
+        stream,
+        line,
+        time: new Date().toISOString(),
+      });
+    },
+    onDone: async (result) => {
+      send({
+        type: 'deploy_done',
+        command_id,
+        process_id,
+        success: result.success,
+        stage: result.stage || null,
+        exit_code: result.exitCode || 0,
+        time: new Date().toISOString(),
+      });
+
+      // If deploy succeeded, restart the process
+      if (result.success) {
+        send({
+          type: 'deploy_output',
+          command_id,
+          process_id,
+          stream: 'stdout',
+          line: '\n━━━ Restarting process ━━━',
+          time: new Date().toISOString(),
+        });
+        const ok = await restartProcess(process_id);
+        send({
+          type: 'deploy_output',
+          command_id,
+          process_id,
+          stream: ok ? 'stdout' : 'stderr',
+          line: ok ? '✓ Process restarted' : '✗ Restart failed',
+          time: new Date().toISOString(),
+        });
+      }
+    },
+  });
+}
 
 // Fetch config from central server
 async function fetchConfig() {

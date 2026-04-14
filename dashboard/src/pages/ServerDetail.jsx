@@ -16,7 +16,7 @@ export default function ServerDetail() {
   const [toast, setToast] = useState(null);
 
   // Form state
-  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '' });
+  const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '', build_command: '' });
 
   const fetchData = useCallback(async () => {
     try {
@@ -104,6 +104,7 @@ export default function ServerDetail() {
       managed_by: proc.managed_by || 'agent',
       match_pattern: proc.match_pattern || '',
       env_vars_text: envText,
+      build_command: proc.build_command || '',
     });
     setShowAddProcess(true);
   };
@@ -132,6 +133,7 @@ export default function ServerDetail() {
         max_restarts: form.max_restarts,
         managed_by: form.managed_by,
         match_pattern: form.match_pattern,
+        build_command: form.build_command || null,
         env_vars: Object.keys(envVars).length > 0 ? envVars : null,
       };
 
@@ -142,7 +144,7 @@ export default function ServerDetail() {
       }
       setShowAddProcess(false);
       setEditingProcess(null);
-      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '' });
+      setForm({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '', build_command: '' });
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -323,6 +325,17 @@ export default function ServerDetail() {
                 <input className="form-input" value={form.cwd} onChange={(e) => setForm({ ...form, cwd: e.target.value })}
                   placeholder="/home/user/my-app" />
               </div>
+              {form.managed_by === 'agent' && (
+                <div className="form-group">
+                  <label className="form-label">Build Command (for Deploy button)</label>
+                  <input className="form-input" value={form.build_command}
+                    onChange={(e) => setForm({ ...form, build_command: e.target.value })}
+                    placeholder="npm run build" />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    Runs after git pull during deploy. Leave blank to skip build step.
+                  </div>
+                </div>
+              )}
               {form.managed_by === 'agent' && (
                 <div className="form-group">
                   <label className="form-label">Environment Variables</label>

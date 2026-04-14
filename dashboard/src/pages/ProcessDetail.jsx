@@ -12,9 +12,13 @@ export default function ProcessDetail() {
   const [activeTab, setActiveTab] = useState('metrics');
   const [metricsRange, setMetricsRange] = useState('1h');
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null); // 'start' | 'stop' | 'restart' | null
-  const [toast, setToast] = useState(null); // { message, type }
+  const [actionLoading, setActionLoading] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [deploying, setDeploying] = useState(false);
+  const [deployLines, setDeployLines] = useState([]);
+  const [deployCommandId, setDeployCommandId] = useState(null);
   const logEndRef = useRef(null);
+  const deployEndRef = useRef(null);
 
   const fetchProcess = useCallback(async () => {
     try {
@@ -100,6 +104,20 @@ export default function ProcessDetail() {
       if (msg.type === 'process_update' && msg.process?.id === id) {
         setProc(msg.process);
       }
+      if (msg.type === 'deploy_output' && msg.process_id === id) {
+        setDeployLines(prev => [...prev, { stream: msg.stream, line: msg.line }]);
+      }
+      if (msg.type === 'deploy_done' && msg.process_id === id) {
+        if (msg.success) {
+          setDeployLines(prev => [...prev, { stream: 'stdout', line: '\n✓ Deploy successful' }]);
+          setToast({ message: 'Deploy successful!', type: 'success' });
+        } else {
+          setDeployLines(prev => [...prev, { stream: 'stderr', line: `\n✗ Deploy failed at ${msg.stage} stage (exit ${msg.exit_code})` }]);
+          setToast({ message: `Deploy failed at ${msg.stage} stage`, type: 'error' });
+        }
+        setTimeout(() => setToast(null), 6000);
+        setTimeout(() => setDeploying(false), 2000);
+      }
     };
     window.addEventListener('ws-message', handler);
     return () => window.removeEventListener('ws-message', handler);
@@ -111,6 +129,27 @@ export default function ProcessDetail() {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, activeTab]);
+
+  // Auto-scroll deploy output
+  useEffect(() => {
+    if (deploying && deployEndRef.current) {
+      deployEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [deployLines, deploying]);
+
+  const handleDeploy = async () => {
+    if (deploying) return;
+    setDeployLines([]);
+    setDeploying(true);
+    try {
+      const result = await api.post(`/api/processes/${id}/deploy`);
+      setDeployCommandId(result.command_id);
+      setDeployLines([{ stream: 'stdout', line: `→ Deploy queued (${result.command_id})` }]);
+    } catch (err) {
+      setDeployLines([{ stream: 'stderr', line: `Failed to queue deploy: ${err.message}` }]);
+      setTimeout(() => setDeploying(false), 3000);
+    }
+  };
 
   const showToast = (message, type = 'success', durationMs = 3500) => {
     setToast({ message, type });
@@ -213,17 +252,22 @@ export default function ProcessDetail() {
           <div className="mono" style={{ color: 'var(--text-muted)', marginTop: 4 }}>{proc.command}</div>
         </div>
         <div className="btn-group">
+          {proc.managed_by !== 'external' && (
+            <button className="btn btn-primary" onClick={handleDeploy} disabled={deploying || !!actionLoading}>
+              {deploying ? '⟳ Deploying...' : '⚡ Deploy'}
+            </button>
+          )}
           {proc.status !== 'running' && (
-            <button className="btn btn-success" onClick={() => handleAction('start')} disabled={!!actionLoading}>
+            <button className="btn btn-success" onClick={() => handleAction('start')} disabled={!!actionLoading || deploying}>
               {actionLoading === 'start' ? '⟳ Starting...' : '▶ Start'}
             </button>
           )}
           {proc.status === 'running' && (
             <>
-              <button className="btn" onClick={() => handleAction('restart')} disabled={!!actionLoading}>
+              <button className="btn" onClick={() => handleAction('restart')} disabled={!!actionLoading || deploying}>
                 {actionLoading === 'restart' ? '⟳ Restarting...' : '↻ Restart'}
               </button>
-              <button className="btn btn-danger" onClick={() => handleAction('stop')} disabled={!!actionLoading}>
+              <button className="btn btn-danger" onClick={() => handleAction('stop')} disabled={!!actionLoading || deploying}>
                 {actionLoading === 'stop' ? '⟳ Stopping...' : '■ Stop'}
               </button>
             </>
@@ -386,6 +430,33 @@ export default function ProcessDetail() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Deploy Output Modal */}
+      {deploying && (
+        <div className="modal-overlay" style={{ zIndex: 400 }}>
+          <div className="modal fade-in" style={{ maxWidth: 900, width: '90vw' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>⚡ Deploying {proc.name}</span>
+              <button className="btn btn-sm" onClick={() => setDeploying(false)}>Close</button>
+            </div>
+            <div className="log-viewer" style={{ maxHeight: '60vh', minHeight: 300 }}>
+              {deployLines.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', padding: 20, textAlign: 'center' }}>Waiting for output...</div>
+              ) : (
+                deployLines.map((l, i) => (
+                  <div key={i} className={`log-line log-line-${l.stream}`}>
+                    {l.line}
+                  </div>
+                ))
+              )}
+              <div ref={deployEndRef} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, textAlign: 'center' }}>
+              Runs: git pull → {proc.build_command || 'npm run build'} → restart
+            </div>
+          </div>
         </div>
       )}
 
