@@ -392,29 +392,32 @@ export default function ProcessDetail() {
       {/* Toast */}
       {toast && (() => {
         const colors = {
-          success: { bg: 'var(--green-dim)', border: 'var(--green)', icon: '✓' },
-          error: { bg: 'var(--red-dim)', border: 'var(--red)', icon: '✗' },
-          warning: { bg: 'var(--yellow-dim)', border: 'var(--yellow)', icon: '⚠' },
-          info: { bg: 'var(--accent)', border: 'var(--accent-hover)', icon: '⟳' },
+          success: { bg: 'var(--green-dim)', icon: '✓' },
+          error: { bg: 'var(--red-dim)', icon: '✗' },
+          warning: { bg: 'var(--yellow-dim)', icon: '⚠' },
+          info: { bg: 'var(--accent)', icon: '⟳' },
         };
         const c = colors[toast.type] || colors.info;
         return (
           <div className="fade-in" style={{
             position: 'fixed',
-            bottom: 24,
-            right: 24,
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
             background: c.bg,
             color: '#fff',
-            padding: '14px 22px',
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
-            fontSize: 13,
+            padding: '22px 34px',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 0 40px rgba(0,212,255,0.4), 0 10px 40px rgba(0,0,0,0.7)',
+            fontSize: 16,
             fontWeight: 600,
             zIndex: 500,
-            border: `1px solid ${c.border}`,
-            maxWidth: 420,
+            border: '3px solid #00d4ff',
+            maxWidth: 500,
+            textAlign: 'center',
+            minWidth: 300,
           }}>
-            <span style={{ marginRight: 8, fontSize: 15 }}>{c.icon}</span>{toast.message}
+            <span style={{ marginRight: 10, fontSize: 20 }}>{c.icon}</span>{toast.message}
           </div>
         );
       })()}
