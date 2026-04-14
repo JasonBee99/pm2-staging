@@ -81,14 +81,27 @@ export function connect() {
     if (msg.type === 'command') {
       console.log(`[ws] Received command: ${msg.action} for process ${msg.process_id || 'all'}`);
       if (onCommand) {
-        const result = onCommand(msg);
-        // Acknowledge
-        safeSend({
-          type: 'command_ack',
-          command_id: msg.id,
-          success: result !== false,
-          message: result === false ? 'Command failed' : 'OK',
-        });
+        // Run async without blocking the message loop, but catch errors
+        Promise.resolve()
+          .then(() => onCommand(msg))
+          .then((result) => {
+            safeSend({
+              type: 'command_ack',
+              command_id: msg.id,
+              success: result !== false,
+              message: result === false ? 'Command failed' : 'OK',
+            });
+            console.log(`[ws] Command ${msg.action} completed: ${result !== false ? 'OK' : 'FAILED'}`);
+          })
+          .catch((err) => {
+            console.error(`[ws] Command ${msg.action} error:`, err.message, err.stack);
+            safeSend({
+              type: 'command_ack',
+              command_id: msg.id,
+              success: false,
+              message: err.message,
+            });
+          });
       }
     }
 

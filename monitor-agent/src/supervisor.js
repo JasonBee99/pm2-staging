@@ -246,7 +246,10 @@ export function stopProcess(processId) {
  */
 export async function restartProcess(processId) {
   const entry = managed.get(processId);
-  if (!entry) return false;
+  if (!entry) {
+    console.log(`[supervisor] restartProcess: no managed entry for ${processId}, ignoring`);
+    return false;
+  }
 
   const oldPgid = entry.pgid;
 
@@ -263,9 +266,19 @@ export async function restartProcess(processId) {
   // Mark as stopped so the exit handler won't auto-restart during shutdown
   entry.status = 'stopped';
 
+  // If there's no old process, skip straight to start
+  if (!oldPgid) {
+    console.log(`[supervisor] No existing process for ${entry.config.name}, starting fresh`);
+    entry.child = null;
+    entry.pid = null;
+    return startProcess(processId);
+  }
+
   // Send SIGTERM to the whole group
-  if (oldPgid) {
+  try {
     killProcessGroup(oldPgid, 'SIGTERM');
+  } catch (err) {
+    console.error(`[supervisor] Error killing pgid ${oldPgid}:`, err.message);
   }
 
   // Wait up to 5 seconds for the process group to fully die
@@ -275,15 +288,11 @@ export async function restartProcess(processId) {
   while (waited < maxWaitMs) {
     await new Promise(r => setTimeout(r, pollMs));
     waited += pollMs;
-
-    // Check if any process in the group is still alive
-    if (!oldPgid || !isProcessAlive(oldPgid)) {
-      break;
-    }
+    if (!isProcessAlive(oldPgid)) break;
   }
 
   // Force kill anything still alive
-  if (oldPgid && isProcessAlive(oldPgid)) {
+  if (isProcessAlive(oldPgid)) {
     console.log(`[supervisor] Force killing process group ${oldPgid}`);
     killProcessGroup(oldPgid, 'SIGKILL');
     await new Promise(r => setTimeout(r, 500));
@@ -293,9 +302,9 @@ export async function restartProcess(processId) {
   entry.child = null;
   entry.pid = null;
   entry.pgid = null;
+  entry.status = 'stopped';
 
   // Now start fresh
-  entry.status = 'stopped'; // startProcess will change to 'running'
   return startProcess(processId);
 }
 
