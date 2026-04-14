@@ -68,6 +68,16 @@ export function startProcess(processId) {
     return true;
   }
 
+  // Reset restart counter on manual start (clears "exceeded max restarts" state)
+  entry.restartCount = 0;
+  entry.backoffMs = 1000;
+
+  // Clear any pending restart timer
+  if (entry.restartTimer) {
+    clearTimeout(entry.restartTimer);
+    entry.restartTimer = null;
+  }
+
   const { config: pc } = entry;
   const cfg = getConfig();
 
@@ -96,11 +106,12 @@ export function startProcess(processId) {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: false,
+      detached: true, // Create a new process group so we can kill the whole tree
     });
 
     entry.child = child;
     entry.pid = child.pid;
+    entry.pgid = child.pid; // Process group leader PID == child PID when detached
     entry.status = 'running';
 
     // Pipe stdout
@@ -130,6 +141,7 @@ export function startProcess(processId) {
 
       entry.child = null;
       entry.pid = null;
+      entry.pgid = null;
       cleanupPid(child.pid);
 
       if (entry.status === 'stopped') {
@@ -183,7 +195,24 @@ export function startProcess(processId) {
 }
 
 /**
- * Stop a process by id.
+ * Kill a process group (the child and all its descendants).
+ */
+function killProcessGroup(pgid, signal) {
+  try {
+    // Negative PID = kill the whole process group
+    process.kill(-pgid, signal);
+    return true;
+  } catch (err) {
+    // ESRCH = process/group already gone, that's fine
+    if (err.code !== 'ESRCH') {
+      console.error(`[supervisor] kill pgid ${pgid} ${signal} error:`, err.message);
+    }
+    return false;
+  }
+}
+
+/**
+ * Stop a process by id. Kills the entire process group.
  */
 export function stopProcess(processId) {
   const entry = managed.get(processId);
@@ -199,40 +228,75 @@ export function stopProcess(processId) {
   entry.restartCount = 0;
   entry.backoffMs = 1000;
 
-  if (entry.child) {
-    try {
-      // Try graceful SIGTERM first
-      entry.child.kill('SIGTERM');
-      // Force kill after 5 seconds
-      setTimeout(() => {
-        if (entry.child) {
-          try { entry.child.kill('SIGKILL'); } catch {}
-        }
-      }, 5000);
-    } catch {}
+  if (entry.pgid) {
+    // Try graceful SIGTERM on the whole group
+    killProcessGroup(entry.pgid, 'SIGTERM');
+    // Force SIGKILL after 5 seconds if anything survived
+    setTimeout(() => {
+      killProcessGroup(entry.pgid, 'SIGKILL');
+    }, 5000);
   }
 
   return true;
 }
 
 /**
- * Restart a process by id.
+ * Restart a process by id. Stops, waits for process group to fully die,
+ * then starts fresh. Resets restart counter.
  */
-export function restartProcess(processId) {
+export async function restartProcess(processId) {
   const entry = managed.get(processId);
   if (!entry) return false;
 
+  const oldPgid = entry.pgid;
+
+  // Reset counters first so a fresh start isn't blocked by old crash history
   entry.restartCount = 0;
   entry.backoffMs = 1000;
 
-  stopProcess(processId);
+  // Clear any pending auto-restart timer
+  if (entry.restartTimer) {
+    clearTimeout(entry.restartTimer);
+    entry.restartTimer = null;
+  }
 
-  // Wait a beat for the old process to die, then start
-  setTimeout(() => {
-    startProcess(processId);
-  }, 1000);
+  // Mark as stopped so the exit handler won't auto-restart during shutdown
+  entry.status = 'stopped';
 
-  return true;
+  // Send SIGTERM to the whole group
+  if (oldPgid) {
+    killProcessGroup(oldPgid, 'SIGTERM');
+  }
+
+  // Wait up to 5 seconds for the process group to fully die
+  const maxWaitMs = 5000;
+  const pollMs = 200;
+  let waited = 0;
+  while (waited < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollMs));
+    waited += pollMs;
+
+    // Check if any process in the group is still alive
+    if (!oldPgid || !isProcessAlive(oldPgid)) {
+      break;
+    }
+  }
+
+  // Force kill anything still alive
+  if (oldPgid && isProcessAlive(oldPgid)) {
+    console.log(`[supervisor] Force killing process group ${oldPgid}`);
+    killProcessGroup(oldPgid, 'SIGKILL');
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Clear entry state
+  entry.child = null;
+  entry.pid = null;
+  entry.pgid = null;
+
+  // Now start fresh
+  entry.status = 'stopped'; // startProcess will change to 'running'
+  return startProcess(processId);
 }
 
 /**
