@@ -12,6 +12,8 @@ export default function ServerDetail() {
   const [showAddProcess, setShowAddProcess] = useState(false);
   const [editingProcess, setEditingProcess] = useState(null);
   const [liveMetrics, setLiveMetrics] = useState({});
+  const [actionLoading, setActionLoading] = useState(null);
+  const [toast, setToast] = useState(null);
 
   // Form state
   const [form, setForm] = useState({ name: '', command: '', cwd: '', autorestart: true, max_restarts: 10, managed_by: 'external', match_pattern: '', env_vars_text: '' });
@@ -53,10 +55,21 @@ export default function ServerDetail() {
   }, []);
 
   const handleAction = async (processId, action) => {
+    const key = `${processId}:${action}`;
+    if (actionLoading) return;
+    setActionLoading(key);
     try {
       await api.post(`/api/processes/${processId}/${action}`);
+      setToast({ message: `${action.charAt(0).toUpperCase() + action.slice(1)} sent`, type: 'success' });
+      setTimeout(() => {
+        fetchData();
+        setActionLoading(null);
+      }, 1500);
+      setTimeout(() => setToast(null), 3500);
     } catch (err) {
-      alert(err.message);
+      setToast({ message: `Failed: ${err.message}`, type: 'error' });
+      setActionLoading(null);
+      setTimeout(() => setToast(null), 3500);
     }
   };
 
@@ -222,12 +235,24 @@ export default function ServerDetail() {
                       <td>
                         <div className="btn-group">
                           {proc.managed_by !== 'external' && proc.status !== 'running' && (
-                            <button className="btn btn-sm btn-success" onClick={() => handleAction(proc.id, 'start')}>Start</button>
+                            <button className="btn btn-sm btn-success"
+                              onClick={() => handleAction(proc.id, 'start')}
+                              disabled={actionLoading === `${proc.id}:start`}>
+                              {actionLoading === `${proc.id}:start` ? '⟳' : 'Start'}
+                            </button>
                           )}
                           {proc.managed_by !== 'external' && proc.status === 'running' && (
                             <>
-                              <button className="btn btn-sm" onClick={() => handleAction(proc.id, 'restart')}>Restart</button>
-                              <button className="btn btn-sm btn-danger" onClick={() => handleAction(proc.id, 'stop')}>Stop</button>
+                              <button className="btn btn-sm"
+                                onClick={() => handleAction(proc.id, 'restart')}
+                                disabled={actionLoading === `${proc.id}:restart`}>
+                                {actionLoading === `${proc.id}:restart` ? '⟳' : 'Restart'}
+                              </button>
+                              <button className="btn btn-sm btn-danger"
+                                onClick={() => handleAction(proc.id, 'stop')}
+                                disabled={actionLoading === `${proc.id}:stop`}>
+                                {actionLoading === `${proc.id}:stop` ? '⟳' : 'Stop'}
+                              </button>
                             </>
                           )}
                           {user?.role === 'admin' && (
@@ -329,6 +354,26 @@ export default function ServerDetail() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fade-in" style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: toast.type === 'error' ? 'var(--red-dim)' : 'var(--green-dim)',
+          color: '#fff',
+          padding: '12px 20px',
+          borderRadius: 'var(--radius)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+          fontSize: 13,
+          fontWeight: 600,
+          zIndex: 500,
+          border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`,
+        }}>
+          {toast.type === 'error' ? '✗ ' : '✓ '}{toast.message}
         </div>
       )}
     </div>

@@ -12,6 +12,8 @@ export default function ProcessDetail() {
   const [activeTab, setActiveTab] = useState('metrics');
   const [metricsRange, setMetricsRange] = useState('1h');
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null); // 'start' | 'stop' | 'restart' | null
+  const [toast, setToast] = useState(null); // { message, type }
   const logEndRef = useRef(null);
 
   const fetchProcess = useCallback(async () => {
@@ -110,11 +112,26 @@ export default function ProcessDetail() {
     }
   }, [logs, activeTab]);
 
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   const handleAction = async (action) => {
+    if (actionLoading) return; // Prevent double-click
+    setActionLoading(action);
     try {
       await api.post(`/api/processes/${id}/${action}`);
+      showToast(`${action.charAt(0).toUpperCase() + action.slice(1)} command sent`, 'success');
+      // Refresh process state after a short delay
+      setTimeout(() => {
+        fetchProcess();
+        fetchEvents();
+      }, 1500);
+      setTimeout(() => setActionLoading(null), 2500);
     } catch (err) {
-      alert(err.message);
+      showToast(`Failed: ${err.message}`, 'error');
+      setActionLoading(null);
     }
   };
 
@@ -148,12 +165,18 @@ export default function ProcessDetail() {
         </div>
         <div className="btn-group">
           {proc.status !== 'running' && (
-            <button className="btn btn-success" onClick={() => handleAction('start')}>▶ Start</button>
+            <button className="btn btn-success" onClick={() => handleAction('start')} disabled={!!actionLoading}>
+              {actionLoading === 'start' ? '⟳ Starting...' : '▶ Start'}
+            </button>
           )}
           {proc.status === 'running' && (
             <>
-              <button className="btn" onClick={() => handleAction('restart')}>↻ Restart</button>
-              <button className="btn btn-danger" onClick={() => handleAction('stop')}>■ Stop</button>
+              <button className="btn" onClick={() => handleAction('restart')} disabled={!!actionLoading}>
+                {actionLoading === 'restart' ? '⟳ Restarting...' : '↻ Restart'}
+              </button>
+              <button className="btn btn-danger" onClick={() => handleAction('stop')} disabled={!!actionLoading}>
+                {actionLoading === 'stop' ? '⟳ Stopping...' : '■ Stop'}
+              </button>
             </>
           )}
         </div>
@@ -314,6 +337,26 @@ export default function ProcessDetail() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="toast fade-in" style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: toast.type === 'error' ? 'var(--red-dim)' : 'var(--green-dim)',
+          color: '#fff',
+          padding: '12px 20px',
+          borderRadius: 'var(--radius)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+          fontSize: 13,
+          fontWeight: 600,
+          zIndex: 500,
+          border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`,
+        }}>
+          {toast.type === 'error' ? '✗ ' : '✓ '}{toast.message}
         </div>
       )}
     </div>
