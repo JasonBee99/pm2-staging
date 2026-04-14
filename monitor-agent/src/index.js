@@ -9,7 +9,7 @@ import {
 import { ExternalMonitor } from './external-monitor.js';
 import {
   connect, setCallbacks, sendMetrics, sendEvent, sendLog,
-  sendHeartbeat, isConnected, disconnect,
+  sendHeartbeat, isConnected, disconnect, send,
 } from './ws-client.js';
 
 // Load config
@@ -94,10 +94,12 @@ setCallbacks({
 
 // Handle deploy command from central
 async function handleDeploy(msg) {
-  const { process_id, command_id, cwd, build_command, env_vars } = msg;
+  const { process_id, cwd, build_command, env_vars } = msg;
+  const command_id = msg.id || msg.command_id;
+
+  console.log(`[deploy] Starting deploy for process ${process_id} in ${cwd}`);
 
   // Send start event
-  const { send } = await import('./ws-client.js');
   send({
     type: 'deploy_start',
     command_id,
