@@ -399,7 +399,7 @@ export default function ProcessDetail() {
         };
         const c = colors[toast.type] || colors.info;
         return (
-          <div className="fade-in" style={{
+          <div className="toast-fade-in" style={{
             position: 'fixed',
             top: '50%',
             left: '50%',
