@@ -112,23 +112,72 @@ export default function ProcessDetail() {
     }
   }, [logs, activeTab]);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = (message, type = 'success', durationMs = 3500) => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), durationMs);
+  };
+
+  const pollForStatus = async (action) => {
+    // Poll for up to 15 seconds, 2s intervals
+    const maxAttempts = 8;
+    let lastStatus = null;
+    let consecutiveRunning = 0;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const data = await api.get(`/api/processes/${id}`);
+        const p = data.process;
+        setProc(p);
+        lastStatus = p.status;
+
+        if (action === 'stop') {
+          if (p.status === 'stopped') {
+            return { ok: true, message: 'Stopped successfully' };
+          }
+        } else {
+          // start or restart — want to see 'running' stable
+          if (p.status === 'running') {
+            consecutiveRunning++;
+            if (consecutiveRunning >= 2) {
+              return { ok: true, message: `${action === 'restart' ? 'Restart' : 'Start'} successful — process is running` };
+            }
+          } else if (p.status === 'crashed') {
+            return { ok: false, message: `${action === 'restart' ? 'Restart' : 'Start'} failed — process crashed. Check Events tab.` };
+          } else {
+            consecutiveRunning = 0;
+          }
+        }
+      } catch (err) {
+        // keep trying
+      }
+    }
+
+    return { ok: null, message: `Still ${action === 'stop' ? 'stopping' : 'starting'} — status: ${lastStatus || 'unknown'}` };
   };
 
   const handleAction = async (action) => {
-    if (actionLoading) return; // Prevent double-click
+    if (actionLoading) return;
     setActionLoading(action);
     try {
       await api.post(`/api/processes/${id}/${action}`);
-      showToast(`${action.charAt(0).toUpperCase() + action.slice(1)} command sent`, 'success');
-      // Refresh process state after a short delay
-      setTimeout(() => {
-        fetchProcess();
-        fetchEvents();
-      }, 1500);
-      setTimeout(() => setActionLoading(null), 2500);
+      showToast(`${action.charAt(0).toUpperCase() + action.slice(1)} command sent — verifying...`, 'info', 30000);
+
+      // Refresh events so user sees the action recorded
+      setTimeout(() => fetchEvents(), 1500);
+
+      // Poll for confirmation
+      const result = await pollForStatus(action);
+      setActionLoading(null);
+
+      if (result.ok === true) {
+        showToast(result.message, 'success', 5000);
+      } else if (result.ok === false) {
+        showToast(result.message, 'error', 8000);
+      } else {
+        showToast(result.message, 'warning', 5000);
+      }
+      fetchEvents();
     } catch (err) {
       showToast(`Failed: ${err.message}`, 'error');
       setActionLoading(null);
@@ -341,24 +390,34 @@ export default function ProcessDetail() {
       )}
 
       {/* Toast */}
-      {toast && (
-        <div className="toast fade-in" style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          background: toast.type === 'error' ? 'var(--red-dim)' : 'var(--green-dim)',
-          color: '#fff',
-          padding: '12px 20px',
-          borderRadius: 'var(--radius)',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
-          fontSize: 13,
-          fontWeight: 600,
-          zIndex: 500,
-          border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`,
-        }}>
-          {toast.type === 'error' ? '✗ ' : '✓ '}{toast.message}
-        </div>
-      )}
+      {toast && (() => {
+        const colors = {
+          success: { bg: 'var(--green-dim)', border: 'var(--green)', icon: '✓' },
+          error: { bg: 'var(--red-dim)', border: 'var(--red)', icon: '✗' },
+          warning: { bg: 'var(--yellow-dim)', border: 'var(--yellow)', icon: '⚠' },
+          info: { bg: 'var(--accent)', border: 'var(--accent-hover)', icon: '⟳' },
+        };
+        const c = colors[toast.type] || colors.info;
+        return (
+          <div className="fade-in" style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            background: c.bg,
+            color: '#fff',
+            padding: '14px 22px',
+            borderRadius: 'var(--radius)',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+            fontSize: 13,
+            fontWeight: 600,
+            zIndex: 500,
+            border: `1px solid ${c.border}`,
+            maxWidth: 420,
+          }}>
+            <span style={{ marginRight: 8, fontSize: 15 }}>{c.icon}</span>{toast.message}
+          </div>
+        );
+      })()}
     </div>
   );
 }
