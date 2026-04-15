@@ -2,3 +2,5 @@ node_modules/
 .monitorrc.json
 logs/
 agent.log
+package-lock.json
+dashboard/package-lock.json
