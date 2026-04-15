@@ -1,0 +1,13 @@
+{
+  "name": "monitor-agent",
+  "version": "1.0.0",
+  "description": "Process monitor agent — runs on each monitored VPS",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
