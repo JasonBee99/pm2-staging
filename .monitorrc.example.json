@@ -1,0 +1,8 @@
+{
+  "central_url": "wss://pm2.javawav.com",
+  "agent_token": "PASTE_TOKEN_FROM_DASHBOARD",
+  "server_name": "my-vps",
+  "heartbeat_interval_ms": 10000,
+  "metrics_interval_ms": 5000,
+  "log_buffer_size": 50
+}

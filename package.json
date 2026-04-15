@@ -1,29 +1,13 @@
 {
-  "name": "monitor-central",
+  "name": "monitor-agent",
   "version": "1.0.0",
-  "description": "Process monitoring central server",
+  "description": "Process monitor agent — runs on each monitored VPS",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "migrate": "node migrate.js",
-    "create-admin": "node create-admin.js",
-    "build-dashboard": "cd dashboard && npm run build",
-    "setup": "npm install && cd dashboard && npm install && npm run build"
+    "start": "node src/index.js"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.1",
-    "@fastify/cors": "^10.0.1",
-    "@fastify/session": "^11.0.1",
-    "@fastify/static": "^8.0.3",
-    "@fastify/websocket": "^11.0.1",
-    "bcryptjs": "^2.4.3",
-    "connect-session-knex": "^4.0.0",
-    "dotenv": "^16.4.7",
-    "fastify": "^5.1.0",
-    "mysql2": "^3.11.5",
-    "node-cron": "^3.0.3",
-    "uuid": "^11.0.3"
+    "ws": "^8.18.0"
   }
 }

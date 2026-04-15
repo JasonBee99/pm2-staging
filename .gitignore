@@ -1,5 +1,4 @@
 node_modules/
-.env
-dashboard/node_modules/
-dashboard/dist/
-*.log
+.monitorrc.json
+logs/
+agent.log
