@@ -14,6 +14,8 @@ import {
 
 // Load config
 const config = loadConfig();
+let agentReady = false;
+const pendingCommands = [];
 
 // External process monitor (for PM2-managed or other external processes)
 const externalMonitor = new ExternalMonitor();
@@ -44,6 +46,27 @@ function applyFullConfig(processes) {
   externalMonitor.updateConfig(external);
 }
 
+// Process a single command from central
+function processCommand(msg) {
+  switch (msg.action || msg.type) {
+    case 'start':
+      return startProcess(msg.process_id);
+    case 'stop':
+      return stopProcess(msg.process_id);
+    case 'restart':
+      return restartProcess(msg.process_id);
+    case 'deploy':
+      handleDeploy(msg);
+      return true;
+    case 'config_update':
+      fetchConfig();
+      return true;
+    default:
+      console.log(`[agent] Unknown command: ${msg.action || msg.type}`);
+      return false;
+  }
+}
+
 // Wire up WS callbacks
 setCallbacks({
   onAuth: async (serverId) => {
@@ -65,6 +88,9 @@ setCallbacks({
       if (data.processes) {
         console.log(`[agent] Received ${data.processes.length} process configs`);
         applyFullConfig(data.processes);
+        agentReady = true;
+        console.log(`[agent] Ready — flushing ${pendingCommands.length} pending commands`);
+        for (const pending of pendingCommands.splice(0)) processCommand(pending);
       }
     } catch (err) {
       console.error('[agent] Failed to register via REST:', err.message);
@@ -72,23 +98,12 @@ setCallbacks({
   },
 
   onCmd: (msg) => {
-    switch (msg.action || msg.type) {
-      case 'start':
-        return startProcess(msg.process_id);
-      case 'stop':
-        return stopProcess(msg.process_id);
-      case 'restart':
-        return restartProcess(msg.process_id);
-      case 'deploy':
-        handleDeploy(msg);
-        return true;
-      case 'config_update':
-        fetchConfig();
-        return true;
-      default:
-        console.log(`[agent] Unknown command: ${msg.action || msg.type}`);
-        return false;
+    if (!agentReady) {
+      console.log(`[agent] Not ready yet, buffering command: ${msg.action || msg.type}`);
+      pendingCommands.push(msg);
+      return true;
     }
+    return processCommand(msg);
   },
 });
 
