@@ -17,6 +17,62 @@ export function setLogCallback(fn) { onLog = fn; }
 export function getManagedProcesses() { return managed; }
 
 /**
+ * Path to the state file where we persist running PIDs so we can
+ * re-adopt processes across agent restarts.
+ */
+function getStateFilePath() {
+  const cfg = getConfig();
+  const dir = cfg.log_dir || path.join(process.env.HOME || '.', '.monitor-agent', 'logs');
+  return path.join(dir, 'supervisor-state.json');
+}
+
+/**
+ * Save the current managed processes to disk.
+ * Only persists id → { pid, pgid, name } so we can verify aliveness on startup.
+ */
+export function saveState() {
+  try {
+    const state = {};
+    for (const [id, entry] of managed) {
+      if (entry.pid && entry.status === 'running') {
+        state[id] = {
+          pid: entry.pid,
+          pgid: entry.pgid,
+          name: entry.config.name,
+        };
+      }
+    }
+    const file = getStateFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state, null, 2));
+  } catch (err) {
+    console.error('[supervisor] Failed to save state:', err.message);
+  }
+}
+
+/**
+ * Load persisted state — returns map of process_id → { pid, pgid, name }.
+ * Only returns entries whose PIDs are still alive.
+ */
+function loadState() {
+  try {
+    const file = getStateFilePath();
+    if (!fs.existsSync(file)) return {};
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const alive = {};
+    for (const [id, info] of Object.entries(state)) {
+      if (info.pid && isProcessAlive(info.pid)) {
+        alive[id] = info;
+      }
+    }
+    return alive;
+  } catch (err) {
+    console.error('[supervisor] Failed to load state:', err.message);
+    return {};
+  }
+}
+
+/**
  * Apply a new config from central server.
  * Starts new processes, stops removed ones, updates changed ones.
  */
@@ -32,28 +88,52 @@ export function applyConfig(processConfigs) {
     }
   }
 
+  // Load persisted state to adopt processes across restarts
+  const persistedState = loadState();
+
   // Add or update processes
   for (const pc of processConfigs) {
     const existing = managed.get(pc.id);
     if (!existing) {
-      // New process
-      managed.set(pc.id, {
-        config: pc,
-        child: null,
-        pid: null,
-        status: 'stopped',
-        restartCount: 0,
-        backoffMs: 1000,
-        restartTimer: null,
-      });
-      console.log(`[supervisor] Added process: ${pc.name}`);
-      // Auto-start
-      startProcess(pc.id);
+      // New process — check if we have a persisted PID we can adopt
+      const saved = persistedState[pc.id];
+      if (saved && saved.pid && isProcessAlive(saved.pid)) {
+        console.log(`[supervisor] Adopting existing process: ${pc.name} (PID ${saved.pid})`);
+        managed.set(pc.id, {
+          config: pc,
+          child: null, // We don't have a child handle since we didn't spawn it
+          pid: saved.pid,
+          pgid: saved.pgid || saved.pid,
+          adopted: true,
+          status: 'running',
+          restartCount: 0,
+          backoffMs: 1000,
+          restartTimer: null,
+        });
+        if (onEvent) onEvent(pc.id, 'adopt', null, `Adopted existing PID ${saved.pid}`, saved.pid);
+      } else {
+        managed.set(pc.id, {
+          config: pc,
+          child: null,
+          pid: null,
+          pgid: null,
+          status: 'stopped',
+          restartCount: 0,
+          backoffMs: 1000,
+          restartTimer: null,
+        });
+        console.log(`[supervisor] Added process: ${pc.name}`);
+        // Auto-start
+        startProcess(pc.id);
+      }
     } else {
       // Update config
       existing.config = pc;
     }
   }
+
+  // Save state after any config change
+  saveState();
 }
 
 /**
@@ -113,6 +193,10 @@ export function startProcess(processId) {
     entry.pid = child.pid;
     entry.pgid = child.pid; // Process group leader PID == child PID when detached
     entry.status = 'running';
+    entry.adopted = false;
+
+    // Persist so we can re-adopt across agent restarts
+    saveState();
 
     // Pipe stdout
     child.stdout.on('data', (data) => {
@@ -237,6 +321,7 @@ export function stopProcess(processId) {
     }, 5000);
   }
 
+  saveState();
   return true;
 }
 

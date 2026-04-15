@@ -239,21 +239,14 @@ setInterval(() => {
   healthCheck();
 }, 15000);
 
-// Graceful shutdown — only stop agent-managed processes, leave external ones alone
+// Graceful shutdown — leave managed processes running so they survive agent restarts
 function shutdown(signal) {
-  console.log(`\n[agent] Received ${signal}, shutting down...`);
-
-  const managed = getManagedProcesses();
-  for (const [id] of managed) {
-    stopProcess(id);
-  }
-
+  console.log(`\n[agent] Received ${signal}, shutting down (leaving managed processes running)...`);
   disconnect();
-
   setTimeout(() => {
     console.log('[agent] Exiting.');
     process.exit(0);
-  }, 3000);
+  }, 500);
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
