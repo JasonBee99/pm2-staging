@@ -3,10 +3,11 @@ import path from 'path';
 import os from 'os';
 
 const CONFIG_PATHS = [
+  process.env.MONITOR_CONFIG_PATH,
   path.join(process.cwd(), '.monitorrc.json'),
   path.join(os.homedir(), '.monitorrc.json'),
   '/etc/monitor-agent.json',
-];
+].filter(Boolean);
 
 let config = null;
 
