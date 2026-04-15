@@ -52,7 +52,7 @@ async function start() {
     cookie: {
       maxAge: config.session.maxAge,
       httpOnly: true,
-      secure: config.isProduction,
+      secure: false,
       sameSite: 'lax',
       path: '/',
     },
