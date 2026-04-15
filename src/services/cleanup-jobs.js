@@ -26,7 +26,7 @@ export function startCleanupJobs() {
 
       // Delete raw metrics older than 7 days
       const [result] = await pool.execute(
-        'DELETE FROM metrics WHERE recorded_at < NOW() - INTERVAL 7 DAY LIMIT 50000'
+        'DELETE FROM metrics WHERE recorded_at < NOW() - INTERVAL 24 HOUR LIMIT 50000'
       );
       if (result.affectedRows > 0) {
         console.log(`[cleanup] Purged ${result.affectedRows} raw metric rows`);

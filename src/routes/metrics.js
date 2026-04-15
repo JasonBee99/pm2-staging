@@ -24,7 +24,7 @@ export default async function metricsRoutes(fastify) {
         `SELECT recorded_at as time, cpu_pct as cpu, mem_bytes as mem
          FROM metrics
          WHERE process_id = ? AND recorded_at >= NOW() - ${interval}
-         ORDER BY recorded_at`,
+         ORDER BY recorded_at DESC LIMIT 2000`,
         [request.params.id]
       );
       return { metrics: rows, range };
